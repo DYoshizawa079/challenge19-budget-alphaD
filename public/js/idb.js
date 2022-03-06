@@ -20,7 +20,7 @@ request.onerror = function(event) {
     console.log(event.target.errorCode);
 };
 
-// This function will be executed if we attempt to submit a budget item w/o a internet connection
+// If there's no internet, run this if we attempt to submit a budget item
 function saveRecord(record) {
     // Open a new transaction with the database with read and write permissions 
     const transaction = db.transaction(['new_budget'], 'readwrite');
@@ -29,3 +29,45 @@ function saveRecord(record) {
     // Add the record to your store
     budgetObjectStore.add(record);
 }
+
+// If there is internet, run this to upload a budget item to the server
+function uploadRecord() {
+    const transaction = db.transaction(['new_budget'], 'readwrite');
+    const budgetObjectStore = transaction.objectStore('new_budget');
+    const getAll = budgetObjectStore.getAll();
+
+    // If getAll() is successful
+    getAll.onsuccess = function() {
+        // If there's data in indexDB's store
+        if (getAll.result.length > 0) {
+            fetch('/api/transaction', {
+                method: 'POST',
+                body: JSON.stringify(getAll.result),
+                headers: {
+                    Accept: 'application/json, text/plain, */*',
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(serverResponse => {
+                if(serverResponse.message) {
+                    throw new Error(serverResponse);
+                }
+                // Open another transaction
+                const transaction = db.transaction(['new_budget'], 'readwrite');
+                // Access the new_budget object store
+                const budgetObjectStore = transaction.objectStore('new_budget');
+                // Clear out the store
+                budgetObjectStore.clear();
+
+                alert('All budget items have been posted to the server.');
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        }
+    };
+}
+
+// Listen for internet connection to be restored. Upload local storage data if it is.
+window.addEventListener('online', uploadRecord);
